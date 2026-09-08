@@ -434,6 +434,15 @@
     <div class="game-days" id="gameDays"></div>
   </div>
 
+  <div class="game-panel">
+    <div class="game-head">
+      <h3 class="chart-title" style="margin-bottom:0;">Траты</h3>
+      <div class="game-total" id="moneyTotal">0 ₸ из 10 000 ₸ за неделю</div>
+    </div>
+    <div class="limit-bar"><div class="limit-fill" id="moneyLimitFill" style="width:0%;"></div></div>
+    <div class="game-days" id="moneyDays"></div>
+  </div>
+
   <div class="chart-panel">
     <h3 class="chart-title">Выполнение плана по дням</h3>
     <div class="bars" id="barsChart"></div>
@@ -453,6 +462,7 @@ const DAY_NAMES = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 const DAY_FULL = ["понедельник","вторник","среда","четверг","пятница","суббота","воскресенье"];
 const MONTHS = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
 const GAME_LIMIT = 10;
+const MONEY_LIMIT = 10000;
 
 let weekOffset = 0;
 let activeDay = null;
@@ -463,7 +473,8 @@ function emptyWeekData(){
   return {
     oneOff: {0:[],1:[],2:[],3:[],4:[],5:[],6:[]},
     recurringStatus: {0:{},1:{},2:{},3:{},4:{},5:{},6:{}},
-    gameHours: {0:null,1:null,2:null,3:null,4:null,5:null,6:null}
+    gameHours: {0:null,1:null,2:null,3:null,4:null,5:null,6:null},
+    moneyExpenses: {0:null,1:null,2:null,3:null,4:null,5:null,6:null}
   };
 }
 
@@ -621,6 +632,7 @@ async function loadWeek(){
   if(!currentWeekData.oneOff) currentWeekData.oneOff = {0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
   if(!currentWeekData.recurringStatus) currentWeekData.recurringStatus = {0:{},1:{},2:{},3:{},4:{},5:{},6:{}};
   if(!currentWeekData.gameHours) currentWeekData.gameHours = {0:null,1:null,2:null,3:null,4:null,5:null,6:null};
+  if(!currentWeekData.moneyExpenses) currentWeekData.moneyExpenses = {0:null,1:null,2:null,3:null,4:null,5:null,6:null};
   for(let i=0;i<7;i++){
     if(!currentWeekData.oneOff[i]) currentWeekData.oneOff[i]=[];
     if(!currentWeekData.recurringStatus[i]) currentWeekData.recurringStatus[i]={};
@@ -658,6 +670,7 @@ function renderAll(){
   renderTabs();
   renderTasks();
   renderGameDays();
+  renderMoneyDays();
   renderBars();
 }
 
@@ -802,6 +815,45 @@ function renderGameDays(){
 
 function formatHours(n){
   return (Math.round(n*10)/10).toString().replace(".",",");
+}
+
+function formatMoney(n){
+  return Math.round(n).toLocaleString("ru-RU");
+}
+
+function renderMoneyDays(){
+  const wrap = document.getElementById("moneyDays");
+  wrap.innerHTML = "";
+  const ti = todayIndex();
+  let total = 0;
+  for(let i=0;i<7;i++){
+    const val = currentWeekData.moneyExpenses[i];
+    if(typeof val === "number") total += val;
+    const col = document.createElement("div");
+    col.className = "game-day";
+    col.innerHTML = `
+      <label class="${i===ti?'today':''}">${DAY_NAMES[i]}</label>
+      <input type="number" min="0" step="1" placeholder="—" value="${val===null||val===undefined?'':val}">
+      <span class="unit">₸</span>
+    `;
+    const input = col.querySelector("input");
+    input.addEventListener("change", ()=>{
+      const v = input.value.trim();
+      currentWeekData.moneyExpenses[i] = v==="" ? null : Math.max(0, parseFloat(v.replace(",",".")) || 0);
+      saveWeek();
+    });
+    wrap.appendChild(col);
+  }
+  const totalEl = document.getElementById("moneyTotal");
+  const fillEl = document.getElementById("moneyLimitFill");
+  const over = total > MONEY_LIMIT;
+  totalEl.textContent = `${formatMoney(total)} ₸ из ${formatMoney(MONEY_LIMIT)} ₸ за неделю`;
+  totalEl.classList.toggle("over", over);
+  fillEl.style.width = Math.min(100, (total/MONEY_LIMIT)*100) + "%";
+  fillEl.classList.toggle("over", over);
+  if(over){
+    totalEl.textContent += ` — превышение на ${formatMoney(total-MONEY_LIMIT)} ₸`;
+  }
 }
 
 function renderBars(){
