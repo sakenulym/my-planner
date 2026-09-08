@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ежедневник</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --ink:#1E2A25;
+    --paper:#EFEAD9;
+    --paper-2:#E5DFC9;
+    --line:#D3C8A8;
+    --done:#3B6E58;
+    --done-soft:#B9CDBF;
+    --pending:#A2542E;
+    --gold:#B9903B;
+    --text:#26241D;
+    --text-soft:#6B6656;
+    --white:#FAF8F1;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    min-height:100vh;
+    padding:28px 16px 60px;
+  }
+  .sheet{
+    max-width:880px;
+    margin:0 auto;
+    background:var(--paper);
+    border-radius:4px;
+    box-shadow:0 24px 60px rgba(0,0,0,.35);
+    overflow:hidden;
+    position:relative;
+  }
+  .sheet::before{
+    content:"";
+    position:absolute;
+    left:64px; top:0; bottom:0;
+    width:1px;
+    background:rgba(162,84,46,.18);
+    pointer-events:none;
+  }
+  header{
+    padding:30px 36px 22px 78px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:14px;
+  }
+  h1{
+    font-family:Georgia,"Iowan Old Style","Palatino Linotype",serif;
+    font-size:30px;
+    font-weight:400;
+    margin:0;
+    letter-spacing:.2px;
+    color:var(--ink);
+  }
+  .week-nav{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    font-size:14px;
+    color:var(--text-soft);
+  }
+  .week-nav button{
+    width:28px; height:28px;
+    border-radius:50%;
+    border:1px solid var(--line);
+    background:var(--white);
+    color:var(--ink);
+    cursor:pointer;
+    font-size:15px;
+    line-height:1;
+    display:flex;align-items:center;justify-content:center;
+    transition:background .15s;
+  }
+  .week-nav button:hover{background:var(--paper-2);}
+  .week-range{min-width:150px;text-align:center;font-weight:600;color:var(--ink);}
+
+  .top-row{
+    display:flex;
+    gap:28px;
+    padding:24px 36px 8px 78px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  .ring-wrap{display:flex;align-items:center;gap:14px;flex-shrink:0;}
+  .ring-label{font-size:13px;color:var(--text-soft);line-height:1.4;}
+  .ring-label b{display:block;font-size:22px;color:var(--ink);font-family:Georgia,serif;}
+
+  .day-tabs{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+    flex:1;
+  }
+  .day-tab{
+    padding:9px 14px;
+    border-radius:3px;
+    border:1px solid transparent;
+    background:transparent;
+    cursor:pointer;
+    font-size:13.5px;
+    color:var(--text-soft);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:3px;
+    min-width:54px;
+    transition:background .15s, color .15s;
+  }
+  .day-tab .dname{font-weight:600;}
+  .day-tab .dpct{font-size:11px;}
+  .day-tab.today{border-color:var(--gold);}
+  .day-tab.active{background:var(--ink);color:var(--white);}
+  .day-tab.active .dpct{color:var(--done-soft);}
+  .day-tab:not(.active):hover{background:var(--paper-2);}
+
+  .tasks-panel{
+    padding:22px 36px 8px 78px;
+  }
+  .section-label{
+    font-size:11.5px;
+    color:var(--text-soft);
+    margin:0 0 8px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .section-label::after{
+    content:"";
+    flex:1;
+    height:1px;
+    background:var(--line);
+  }
+  .tasks-title{
+    font-family:Georgia,serif;
+    font-size:19px;
+    margin:0 0 16px;
+    color:var(--ink);
+  }
+  .task-list{list-style:none;margin:0;padding:0;}
+  .task-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:9px 4px;
+    border-bottom:1px dashed var(--line);
+  }
+  .task-row:last-child{border-bottom:none;}
+  .check{
+    width:19px;height:19px;
+    border:1.5px solid var(--text-soft);
+    border-radius:3px;
+    flex-shrink:0;
+    cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--white);
+    transition:background .15s, border-color .15s;
+  }
+  .check.done{background:var(--done);border-color:var(--done);}
+  .check.done::after{
+    content:"";
+    width:9px;height:5px;
+    border-left:2px solid var(--white);
+    border-bottom:2px solid var(--white);
+    transform:rotate(-45deg) translateY(-1px);
+  }
+  .task-text{flex:1;font-size:15px;color:var(--text);cursor:default;}
+  .task-text.done{color:var(--text-soft);text-decoration:line-through;text-decoration-color:var(--done-soft);}
+  .task-tag{
+    font-size:10.5px;
+    color:var(--gold);
+    border:1px solid var(--gold);
+    border-radius:10px;
+    padding:1px 8px;
+    flex-shrink:0;
+  }
+  .task-del{
+    opacity:0;
+    border:none;background:none;
+    color:var(--pending);
+    cursor:pointer;
+    font-size:15px;
+    padding:2px 6px;
+    transition:opacity .15s;
+  }
+  .task-row:hover .task-del{opacity:.6;}
+  .task-del:hover{opacity:1 !important;}
+  .empty-note{color:var(--text-soft);font-size:14px;padding:6px 4px 4px;font-style:italic;}
+
+  .add-row{
+    display:flex;
+    gap:10px;
+    margin:10px 0 22px;
+    padding:0 4px;
+  }
+  .add-row input{
+    flex:1;
+    border:none;
+    border-bottom:1px solid var(--line);
+    background:transparent;
+    font-size:15px;
+    padding:8px 2px;
+    color:var(--text);
+    font-family:inherit;
+  }
+  .add-row input:focus{outline:none;border-bottom-color:var(--gold);}
+  .add-row button{
+    border:1px solid var(--ink);
+    background:var(--ink);
+    color:var(--white);
+    border-radius:3px;
+    padding:0 18px;
+    font-size:14px;
+    cursor:pointer;
+    transition:opacity .15s;
+    white-space:nowrap;
+  }
+  .add-row button:hover{opacity:.85;}
+  .hint{font-size:11.5px;color:var(--text-soft);margin:-14px 0 20px 4px;}
+
+  .game-panel{
+    padding:24px 36px 8px 78px;
+    border-top:1px solid var(--line);
+  }
+  .game-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-bottom:14px;
+  }
+  .game-total{font-size:14px;color:var(--text-soft);}
+  .game-total b{color:var(--ink);font-size:16px;}
+  .game-total.over b, .game-total.over{color:var(--pending);}
+  .limit-bar{
+    height:8px;
+    border-radius:4px;
+    background:var(--paper-2);
+    overflow:hidden;
+    margin-bottom:20px;
+  }
+  .limit-fill{height:100%;background:var(--done);border-radius:4px;transition:width .3s;}
+  .limit-fill.over{background:var(--pending);}
+  .game-days{
+    display:flex;
+    gap:14px;
+    flex-wrap:wrap;
+  }
+  .game-day{
+    flex:1;
+    min-width:64px;
+    text-align:center;
+  }
+  .game-day label{
+    display:block;
+    font-size:12.5px;
+    color:var(--text-soft);
+    margin-bottom:6px;
+  }
+  .game-day label.today{color:var(--ink);font-weight:700;}
+  .game-day input{
+    width:100%;
+    text-align:center;
+    border:1px solid var(--line);
+    background:var(--white);
+    border-radius:3px;
+    padding:7px 4px;
+    font-size:14px;
+    color:var(--text);
+    font-family:inherit;
+  }
+  .game-day input:focus{outline:none;border-color:var(--gold);}
+  .game-day .unit{display:block;font-size:10px;color:var(--text-soft);margin-top:3px;}
+
+  .chart-panel{
+    padding:26px 36px 34px 78px;
+    border-top:1px solid var(--line);
+    margin-top:4px;
+  }
+  .chart-title{
+    font-family:Georgia,serif;
+    font-size:17px;
+    margin:0 0 18px;
+    color:var(--ink);
+  }
+  .bars{
+    display:flex;
+    align-items:flex-end;
+    gap:14px;
+    height:120px;
+  }
+  .bar-col{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-end;
+    height:100%;
+    gap:8px;
+  }
+  .bar-track{
+    width:100%;
+    max-width:34px;
+    height:100%;
+    background:var(--paper-2);
+    border-radius:3px 3px 0 0;
+    display:flex;
+    align-items:flex-end;
+    overflow:hidden;
+  }
+  .bar-fill{
+    width:100%;
+    background:var(--done);
+    border-radius:3px 3px 0 0;
+    transition:height .4s ease;
+  }
+  .bar-fill.empty-day{background:transparent;}
+  .bar-pct{font-size:11px;color:var(--text-soft);}
+  .bar-day{font-size:12.5px;color:var(--text-soft);}
+  .bar-day.today{color:var(--ink);font-weight:700;}
+
+  .history{
+    margin-top:26px;
+    padding-top:18px;
+    border-top:1px dashed var(--line);
+  }
+  .history-title{font-size:12.5px;color:var(--text-soft);margin:0 0 10px;}
+  .hist-row{display:flex;align-items:flex-end;gap:8px;height:44px;}
+  .hist-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px;}
+  .hist-track{width:100%;max-width:20px;height:100%;background:var(--paper-2);border-radius:2px;display:flex;align-items:flex-end;overflow:hidden;}
+  .hist-fill{width:100%;background:var(--gold);border-radius:2px;}
+  .hist-label{font-size:9.5px;color:var(--text-soft);}
+
+  footer.note{
+    text-align:center;
+    color:#8b8672;
+    font-size:12px;
+    padding:14px 20px 0;
+  }
+
+  @media (max-width:640px){
+    header,.top-row,.tasks-panel,.chart-panel,.game-panel{padding-left:24px;padding-right:20px;}
+    .sheet::before{left:14px;}
+    h1{font-size:24px;}
+    .day-tabs{gap:4px;}
+    .day-tab{min-width:auto;padding:8px 8px;}
+    .game-days{gap:8px;}
+    .game-day{min-width:40px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- Экран входа: показывается, пока пользователь не авторизован -->
+<div id="authOverlay" style="max-width:340px;margin:80px auto;background:var(--paper);border-radius:6px;padding:30px 28px;box-shadow:0 24px 60px rgba(0,0,0,.35);">
+  <h2 style="font-family:Georgia,serif;margin:0 0 6px;color:var(--ink);">Ежедневник</h2>
+  <p style="font-size:13px;color:var(--text-soft);margin:0 0 20px;">Войдите, чтобы данные синхронизировались между устройствами.</p>
+  <input id="authEmail" type="email" placeholder="Email" style="width:100%;padding:9px 10px;margin-bottom:10px;border:1px solid var(--line);border-radius:3px;font-size:14px;box-sizing:border-box;">
+  <input id="authPassword" type="password" placeholder="Пароль (мин. 6 символов)" style="width:100%;padding:9px 10px;margin-bottom:14px;border:1px solid var(--line);border-radius:3px;font-size:14px;box-sizing:border-box;">
+  <div style="display:flex;gap:8px;">
+    <button id="authLoginBtn" style="flex:1;padding:9px;border:1px solid var(--ink);background:var(--ink);color:var(--white);border-radius:3px;cursor:pointer;">Войти</button>
+    <button id="authRegisterBtn" style="flex:1;padding:9px;border:1px solid var(--ink);background:transparent;color:var(--ink);border-radius:3px;cursor:pointer;">Регистрация</button>
+  </div>
+  <p id="authError" style="display:none;color:var(--pending);font-size:12.5px;margin:14px 0 0;"></p>
+</div>
+
+<div id="appRoot" style="display:none;">
+<div class="sheet">
+  <header>
+    <h1>Ежедневник</h1>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div class="week-nav">
+        <button id="prevWeek" aria-label="предыдущая неделя">‹</button>
+        <span class="week-range" id="weekRange">—</span>
+        <button id="nextWeek" aria-label="следующая неделя">›</button>
+      </div>
+      <button id="logoutBtn" style="border:1px solid var(--line);background:transparent;color:var(--text-soft);border-radius:3px;padding:6px 10px;font-size:12px;cursor:pointer;">Выйти</button>
+    </div>
+  </header>
+  <div id="syncStatus" style="display:none;background:var(--pending);color:var(--white);font-size:12.5px;padding:7px 20px;text-align:center;"></div>
+  <div id="loadingOverlay" style="padding:14px 36px 0 78px;font-size:12.5px;color:var(--text-soft);">Загрузка данных…</div>
+
+  <div class="top-row">
+    <div class="ring-wrap">
+      <svg width="64" height="64" viewBox="0 0 64 64">
+        <circle cx="32" cy="32" r="27" fill="none" stroke="var(--paper-2)" stroke-width="7"/>
+        <circle id="ringProgress" cx="32" cy="32" r="27" fill="none" stroke="var(--done)" stroke-width="7"
+          stroke-dasharray="169.6" stroke-dashoffset="169.6" stroke-linecap="round"
+          transform="rotate(-90 32 32)"/>
+      </svg>
+      <div class="ring-label">за неделю<b id="weekPct">0%</b></div>
+    </div>
+    <div class="day-tabs" id="dayTabs"></div>
+  </div>
+
+  <div class="tasks-panel">
+    <h2 class="tasks-title" id="tasksTitle">Задачи</h2>
+
+    <p class="section-label">ежедневные</p>
+    <ul class="task-list" id="recurringList"></ul>
+    <div class="add-row">
+      <input type="text" id="newRecurringInput" placeholder="Новая ежедневная задача (появится во всех днях)…">
+      <button id="addRecurringBtn">Добавить</button>
+    </div>
+    <p class="hint">Отмечается отдельно на каждый день. Удаление убирает задачу из ежедневника совсем.</p>
+
+    <p class="section-label">только на этот день</p>
+    <ul class="task-list" id="taskList"></ul>
+    <div class="empty-note" id="emptyNote" style="display:none;">Разовых задач на этот день нет.</div>
+    <div class="add-row">
+      <input type="text" id="newTaskInput" placeholder="Добавить задачу и нажать Enter…">
+      <button id="addTaskBtn">Добавить</button>
+    </div>
+  </div>
+
+  <div class="game-panel">
+    <div class="game-head">
+      <h3 class="chart-title" style="margin-bottom:0;">Игровое время</h3>
+      <div class="game-total" id="gameTotal">0 ч из 10 ч за неделю</div>
+    </div>
+    <div class="limit-bar"><div class="limit-fill" id="limitFill" style="width:0%;"></div></div>
+    <div class="game-days" id="gameDays"></div>
+  </div>
+
+  <div class="chart-panel">
+    <h3 class="chart-title">Выполнение плана по дням</h3>
+    <div class="bars" id="barsChart"></div>
+
+    <div class="history">
+      <p class="history-title">Последние недели</p>
+      <div class="hist-row" id="historyChart"></div>
+    </div>
+  </div>
+
+  <footer class="note">Данные сохраняются автоматически и синхронизируются на всех устройствах, где вы вошли под своим email.</footer>
+</div>
+</div>
+
+<script>
+const DAY_NAMES = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+const DAY_FULL = ["понедельник","вторник","среда","четверг","пятница","суббота","воскресенье"];
+const MONTHS = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
+const GAME_LIMIT = 10;
+
+let weekOffset = 0;
+let activeDay = null;
+let currentWeekData = emptyWeekData();
+let recurringTasks = [];
+
+function emptyWeekData(){
+  return {
+    oneOff: {0:[],1:[],2:[],3:[],4:[],5:[],6:[]},
+    recurringStatus: {0:{},1:{},2:{},3:{},4:{},5:{},6:{}},
+    gameHours: {0:null,1:null,2:null,3:null,4:null,5:null,6:null}
+  };
+}
+
+function pad(n){ return n<10 ? "0"+n : ""+n; }
+
+function getMonday(offset){
+  const now = new Date();
+  const day = (now.getDay() + 6) % 7;
+  const monday = new Date(now);
+  monday.setHours(0,0,0,0);
+  monday.setDate(now.getDate() - day + offset*7);
+  return monday;
+}
+
+function weekKey(monday){
+  return `${monday.getFullYear()}-${pad(monday.getMonth()+1)}-${pad(monday.getDate())}`;
+}
+
+function formatRange(monday){
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate()+6);
+  const sameMonth = monday.getMonth() === sunday.getMonth();
+  const left = `${monday.getDate()} ${sameMonth ? '' : MONTHS[monday.getMonth()]}`.trim();
+  const right = `${sunday.getDate()} ${MONTHS[sunday.getMonth()]}`;
+  return `${left} – ${right}`;
+}
+
+function todayIndex(){
+  const now = new Date();
+  if (weekOffset !== 0) return -1;
+  return (now.getDay()+6)%7;
+}
+
+function dayPct(dayIndex){
+  const oneOff = currentWeekData.oneOff[dayIndex] || [];
+  const recStatus = currentWeekData.recurringStatus[dayIndex] || {};
+  const total = oneOff.length + recurringTasks.length;
+  if (total===0) return null;
+  const doneOneOff = oneOff.filter(t=>t.done).length;
+  const doneRec = recurringTasks.filter(rt=>recStatus[rt.id]).length;
+  return Math.round(((doneOneOff+doneRec)/total)*100);
+}
+
+function weekPctValue(data, recTemplate){
+  let total=0, done=0;
+  for(let i=0;i<7;i++){
+    const oneOff = data.oneOff[i] || [];
+    const recStatus = data.recurringStatus ? (data.recurringStatus[i]||{}) : {};
+    total += oneOff.length + recTemplate.length;
+    done += oneOff.filter(t=>t.done).length + recTemplate.filter(rt=>recStatus[rt.id]).length;
+  }
+  if (total===0) return 0;
+  return Math.round((done/total)*100);
+}
+
+// ===== FIREBASE НАСТРОЙКА =====
+// Вставьте сюда конфиг вашего проекта из Firebase Console
+// (Project settings → General → Your apps → SDK setup and configuration)
+const firebaseConfig = {
+  apiKey: "AIzaSyDGmDPter0CLV49Pfmb4IEMftkxaoPKQ4E",
+  authDomain: "planner-app-52344.firebaseapp.com",
+  projectId: "planner-app-52344",
+  storageBucket: "planner-app-52344.firebasestorage.app",
+  messagingSenderId: "911048538230",
+  appId: "1:911048538230:web:5a760bcac19ebfc2b00757"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+let currentUser = null;
+
+function docRef(key){
+  return db.collection("users").doc(currentUser.uid).collection("data").doc(key.replace(/\//g,"_"));
+}
+
+async function storageGet(key){
+  try{
+    const snap = await docRef(key).get();
+    return snap.exists ? snap.data().value : null;
+  }catch(e){
+    console.error("Ошибка чтения:", e);
+    return null;
+  }
+}
+async function storageSet(key, value){
+  try{
+    await docRef(key).set({ value, updatedAt: Date.now() });
+    return true;
+  }catch(e){
+    console.error("Не удалось сохранить:", e);
+    showSyncError();
+    return false;
+  }
+}
+
+function showSyncError(){
+  const el = document.getElementById("syncStatus");
+  if(!el) return;
+  el.textContent = "Не удалось синхронизировать изменения. Проверьте соединение и попробуйте снова.";
+  el.style.display = "block";
+  clearTimeout(showSyncError._t);
+  showSyncError._t = setTimeout(()=>{ el.style.display = "none"; }, 4000);
+}
+
+// ===== АВТОРИЗАЦИЯ =====
+function authErr(msg){
+  const el = document.getElementById("authError");
+  el.textContent = msg;
+  el.style.display = "block";
+}
+document.getElementById("authLoginBtn").onclick = async ()=>{
+  const email = document.getElementById("authEmail").value.trim();
+  const pass = document.getElementById("authPassword").value;
+  try{ await auth.signInWithEmailAndPassword(email, pass); }
+  catch(e){ authErr("Не удалось войти: " + (e.message||e.code)); }
+};
+document.getElementById("authRegisterBtn").onclick = async ()=>{
+  const email = document.getElementById("authEmail").value.trim();
+  const pass = document.getElementById("authPassword").value;
+  try{ await auth.createUserWithEmailAndPassword(email, pass); }
+  catch(e){ authErr("Не удалось зарегистрироваться: " + (e.message||e.code)); }
+};
+document.getElementById("logoutBtn").onclick = ()=> auth.signOut();
+
+auth.onAuthStateChanged(async (user)=>{
+  if(user){
+    currentUser = user;
+    document.getElementById("authOverlay").style.display = "none";
+    document.getElementById("appRoot").style.display = "";
+    await loadRecurring();
+    await loadWeek();
+    const ov = document.getElementById("loadingOverlay");
+    if(ov) ov.style.display = "none";
+  } else {
+    currentUser = null;
+    document.getElementById("authOverlay").style.display = "";
+    document.getElementById("appRoot").style.display = "none";
+  }
+});
+
+async function loadRecurring(){
+  const raw = await storageGet("planner:recurring");
+  recurringTasks = raw ? JSON.parse(raw) : [];
+}
+
+async function saveRecurring(){
+  await storageSet("planner:recurring", JSON.stringify(recurringTasks));
+}
+
+async function loadWeek(){
+  const monday = getMonday(weekOffset);
+  const key = "planner:week:" + weekKey(monday);
+  const raw = await storageGet(key);
+  currentWeekData = raw ? JSON.parse(raw) : emptyWeekData();
+  if(!currentWeekData.oneOff) currentWeekData.oneOff = {0:[],1:[],2:[],3:[],4:[],5:[],6:[]};
+  if(!currentWeekData.recurringStatus) currentWeekData.recurringStatus = {0:{},1:{},2:{},3:{},4:{},5:{},6:{}};
+  if(!currentWeekData.gameHours) currentWeekData.gameHours = {0:null,1:null,2:null,3:null,4:null,5:null,6:null};
+  for(let i=0;i<7;i++){
+    if(!currentWeekData.oneOff[i]) currentWeekData.oneOff[i]=[];
+    if(!currentWeekData.recurringStatus[i]) currentWeekData.recurringStatus[i]={};
+  }
+
+  const ti = todayIndex();
+  activeDay = ti >= 0 ? ti : 0;
+
+  document.getElementById("weekRange").textContent = formatRange(monday);
+  renderAll();
+  await updateWeekIndex(key);
+  await renderHistory();
+}
+
+async function saveWeek(){
+  const monday = getMonday(weekOffset);
+  const key = "planner:week:" + weekKey(monday);
+  await storageSet(key, JSON.stringify(currentWeekData));
+  renderAll();
+  await updateWeekIndex(key);
+  await renderHistory();
+}
+
+async function updateWeekIndex(key){
+  const raw = await storageGet("planner:weeks-index");
+  let idx = raw ? JSON.parse(raw) : [];
+  if(!idx.includes(key)){
+    idx.push(key);
+    idx.sort();
+    await storageSet("planner:weeks-index", JSON.stringify(idx));
+  }
+}
+
+function renderAll(){
+  renderTabs();
+  renderTasks();
+  renderGameDays();
+  renderBars();
+}
+
+function renderTabs(){
+  const wrap = document.getElementById("dayTabs");
+  wrap.innerHTML = "";
+  const ti = todayIndex();
+  for(let i=0;i<7;i++){
+    const pct = dayPct(i);
+    const btn = document.createElement("button");
+    btn.className = "day-tab" + (i===activeDay?" active":"") + (i===ti?" today":"");
+    btn.innerHTML = `<span class="dname">${DAY_NAMES[i]}</span><span class="dpct">${pct===null?"—":pct+"%"}</span>`;
+    btn.onclick = () => { activeDay = i; renderTabs(); renderTasks(); };
+    wrap.appendChild(btn);
+  }
+  const wp = weekPctValue(currentWeekData, recurringTasks);
+  document.getElementById("weekPct").textContent = wp + "%";
+  const circumference = 169.6;
+  document.getElementById("ringProgress").style.strokeDashoffset = circumference - (circumference*wp/100);
+}
+
+function escapeHtml(s){
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function renderTasks(){
+  const monday = getMonday(weekOffset);
+  const d = new Date(monday);
+  d.setDate(monday.getDate()+activeDay);
+  document.getElementById("tasksTitle").textContent =
+    `Задачи на ${DAY_FULL[activeDay]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+
+  const recList = document.getElementById("recurringList");
+  recList.innerHTML = "";
+  const recStatus = currentWeekData.recurringStatus[activeDay] || {};
+  recurringTasks.forEach(rt=>{
+    const isDone = !!recStatus[rt.id];
+    const li = document.createElement("li");
+    li.className = "task-row";
+    li.innerHTML = `
+      <div class="check ${isDone?'done':''}"></div>
+      <div class="task-text ${isDone?'done':''}">${escapeHtml(rt.text)}</div>
+      <span class="task-tag">кажд. день</span>
+      <button class="task-del" title="удалить из ежедневных">✕</button>
+    `;
+    li.querySelector(".check").onclick = () => {
+      currentWeekData.recurringStatus[activeDay][rt.id] = !isDone;
+      saveWeek();
+      renderTasks();
+    };
+    li.querySelector(".task-del").onclick = () => {
+      recurringTasks = recurringTasks.filter(x=>x.id!==rt.id);
+      saveRecurring();
+      renderAll();
+    };
+    recList.appendChild(li);
+  });
+
+  const list = document.getElementById("taskList");
+  list.innerHTML = "";
+  const tasks = currentWeekData.oneOff[activeDay] || [];
+  document.getElementById("emptyNote").style.display = tasks.length===0 ? "block" : "none";
+
+  tasks.forEach(t=>{
+    const li = document.createElement("li");
+    li.className = "task-row";
+    li.innerHTML = `
+      <div class="check ${t.done?'done':''}"></div>
+      <div class="task-text ${t.done?'done':''}">${escapeHtml(t.text)}</div>
+      <button class="task-del" title="удалить">✕</button>
+    `;
+    li.querySelector(".check").onclick = () => {
+      t.done = !t.done;
+      saveWeek();
+      renderTasks();
+    };
+    li.querySelector(".task-del").onclick = () => {
+      currentWeekData.oneOff[activeDay] = tasks.filter(x=>x.id!==t.id);
+      saveWeek();
+      renderTasks();
+    };
+    list.appendChild(li);
+  });
+}
+
+function addTask(){
+  const input = document.getElementById("newTaskInput");
+  const text = input.value.trim();
+  if(!text) return;
+  currentWeekData.oneOff[activeDay].push({ id: Date.now()+"-"+Math.random().toString(36).slice(2,7), text, done:false });
+  input.value = "";
+  saveWeek();
+  renderTasks();
+}
+
+function addRecurringTask(){
+  const input = document.getElementById("newRecurringInput");
+  const text = input.value.trim();
+  if(!text) return;
+  recurringTasks.push({ id: Date.now()+"-"+Math.random().toString(36).slice(2,7), text });
+  input.value = "";
+  saveRecurring();
+  renderAll();
+}
+
+function renderGameDays(){
+  const wrap = document.getElementById("gameDays");
+  wrap.innerHTML = "";
+  const ti = todayIndex();
+  let total = 0;
+  for(let i=0;i<7;i++){
+    const val = currentWeekData.gameHours[i];
+    if(typeof val === "number") total += val;
+    const col = document.createElement("div");
+    col.className = "game-day";
+    col.innerHTML = `
+      <label class="${i===ti?'today':''}">${DAY_NAMES[i]}</label>
+      <input type="number" min="0" step="0.5" placeholder="—" value="${val===null||val===undefined?'':val}">
+      <span class="unit">ч</span>
+    `;
+    const input = col.querySelector("input");
+    input.addEventListener("change", ()=>{
+      const v = input.value.trim();
+      currentWeekData.gameHours[i] = v==="" ? null : Math.max(0, parseFloat(v.replace(",",".")) || 0);
+      saveWeek();
+    });
+    wrap.appendChild(col);
+  }
+  const totalEl = document.getElementById("gameTotal");
+  const fillEl = document.getElementById("limitFill");
+  const over = total > GAME_LIMIT;
+  totalEl.textContent = `${formatHours(total)} ч из ${GAME_LIMIT} ч за неделю`;
+  totalEl.classList.toggle("over", over);
+  fillEl.style.width = Math.min(100, (total/GAME_LIMIT)*100) + "%";
+  fillEl.classList.toggle("over", over);
+  if(over){
+    totalEl.textContent += ` — превышение на ${formatHours(total-GAME_LIMIT)} ч`;
+  }
+}
+
+function formatHours(n){
+  return (Math.round(n*10)/10).toString().replace(".",",");
+}
+
+function renderBars(){
+  const wrap = document.getElementById("barsChart");
+  wrap.innerHTML = "";
+  const ti = todayIndex();
+  for(let i=0;i<7;i++){
+    const pct = dayPct(i);
+    const col = document.createElement("div");
+    col.className = "bar-col";
+    col.innerHTML = `
+      <span class="bar-pct">${pct===null?"":pct+"%"}</span>
+      <div class="bar-track"><div class="bar-fill ${pct===null?'empty-day':''}" style="height:${pct||0}%"></div></div>
+      <span class="bar-day ${i===ti?'today':''}">${DAY_NAMES[i]}</span>
+    `;
+    wrap.appendChild(col);
+  }
+}
+
+async function renderHistory(){
+  const wrap = document.getElementById("historyChart");
+  wrap.innerHTML = "";
+  const raw = await storageGet("planner:weeks-index");
+  const idx = raw ? JSON.parse(raw) : [];
+
+  const last = idx.slice(-8);
+  if(last.length===0){ wrap.innerHTML = '<span style="font-size:12px;color:var(--text-soft);">пока нет истории</span>'; return; }
+
+  for(const k of last){
+    let pct = 0;
+    const wraw = await storageGet("planner:week:"+k);
+    if(wraw){ pct = weekPctValue(JSON.parse(wraw), recurringTasks); }
+    const d = new Date(k);
+    const col = document.createElement("div");
+    col.className = "hist-col";
+    col.innerHTML = `
+      <div class="hist-track"><div class="hist-fill" style="height:${pct}%"></div></div>
+      <span class="hist-label">${d.getDate()}.${pad(d.getMonth()+1)}</span>
+    `;
+    wrap.appendChild(col);
+  }
+}
+
+document.getElementById("addTaskBtn").onclick = addTask;
+document.getElementById("newTaskInput").addEventListener("keydown", e=>{
+  if(e.key==="Enter") addTask();
+});
+document.getElementById("addRecurringBtn").onclick = addRecurringTask;
+document.getElementById("newRecurringInput").addEventListener("keydown", e=>{
+  if(e.key==="Enter") addRecurringTask();
+});
+document.getElementById("prevWeek").onclick = ()=>{ weekOffset--; loadWeek(); };
+document.getElementById("nextWeek").onclick = ()=>{ weekOffset++; loadWeek(); };
+
+// Приложение стартует автоматически при входе — см. auth.onAuthStateChanged выше.
+</script>
+</body>
+</html>
